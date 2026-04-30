@@ -1,4 +1,4 @@
-# OCS AI Proxy
+# OCS Copilot
 
 一个用于 **OCS 网课助手** 的本地大模型代理服务。  
 将 `/v1/chat/completions` 请求转发到本地（或兼容 OpenAI 协议）的 LLM 接口，并对输出进行结构化约束与解析。
@@ -16,6 +16,7 @@
 
 ## 项目结构
 
+```text
 ocs-ai-proxy
 ├─ main.go                 # 服务入口
 ├─ go.mod                  # Go 模块定义
@@ -31,6 +32,7 @@ ocs-ai-proxy
    └─ proxy
       ├─ llm_proxy.go      # LLM 代理核心逻辑（调用、重试、解析）
       └─ prompt.go         # 系统提示词与降级响应模板
+```
 
 ---
 
