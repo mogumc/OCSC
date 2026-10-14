@@ -1,29 +1,43 @@
-.PHONY: build run clean test lint
+BINARY  := ocs-ai-proxy
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+IMAGE   ?= ghcr.io/mogumc/ocsc
+LDFLAGS := -s -w -X main.version=$(VERSION)
 
-# 默认目标
+.PHONY: all build run test vet lint fmt clean docker-build docker-run docker-push
+
+all: build
+
+# 本地构建
 build:
-	go build -o bin/ocs-ai-proxy .
+	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/$(BINARY) .
 
-run:
-	$(MAKE) build
-	./bin/ocs-ai-proxy
+# 本地运行：.env 由程序自动加载，不需要手动 source
+run: build
+	./bin/$(BINARY)
 
-# 从 .env 加载配置后运行
-run-env:
-	set -a && source .env 2>/dev/null || true && $(MAKE) run
+test:
+	go test ./...
+
+vet:
+	go vet ./...
+
+lint: vet
+
+fmt:
+	gofmt -l -w .
 
 clean:
 	rm -rf bin/
 	go clean
 
-test:
-	go test ./...
+# ---- Docker ----
 
-lint:
-	go vet ./...
+docker-build:
+	docker build --build-arg VERSION=$(VERSION) -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
 
-# 一键启动（含构建 + 加载环境变量）
-start:
-	set -a && source .env 2>/dev/null || true && \
-		go build -o bin/ocs-ai-proxy . && \
-		./bin/ocs-ai-proxy
+docker-run:
+	docker run --rm -p 8080:8080 --env-file .env $(IMAGE):latest
+
+docker-push:
+	docker push $(IMAGE):$(VERSION)
+	docker push $(IMAGE):latest

@@ -20,6 +20,14 @@ profile.cov
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+# Local build output
+/bin/
+
+# 本地答案缓存
+*.db
+*.db-wal
+*.db-shm
+
 # Go workspace file
 go.work
 go.work.sum
@@ -28,5 +36,7 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+.workbuddy/
+.codebuddy/

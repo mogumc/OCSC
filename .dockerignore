@@ -1,0 +1,18 @@
+.git
+.gitignore
+.github
+bin/
+*.md
+*.exe
+
+# 绝不把本地密钥打进镜像
+.env
+.env.local
+.env.*.local
+
+# 本地缓存库无需进镜像
+*.db
+*.db-wal
+*.db-shm
+
+docker-compose.yml

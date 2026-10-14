@@ -1,0 +1,33 @@
+services:
+  ocs-copilot:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
+    image: ghcr.io/mogumc/ocsc:latest
+    container_name: ocs-copilot
+    restart: unless-stopped
+    # 需要先 cp .env.example .env 并填好 BASE_URL / MODEL / API_KEY
+    # 对外暴露时请在 .env 里设置 ACCESS_TOKEN，否则同一网络内任何人可调用
+    env_file:
+      - .env
+    environment:
+      # 缓存文件指向挂载卷，容器重建后答案缓存不会丢
+      CACHE_DB: /data/answer_cache.db
+    ports:
+      - "8080:8080"
+    volumes:
+      - ocs-data:/data
+    extra_hosts:
+      # 让容器内的 http://host.docker.internal:11434 指向宿主机上的 Ollama
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      # 镜像基于 distroless，没有 shell/curl，因此直接用二进制自带的探测模式
+      test: ["CMD", "/usr/local/bin/ocs-ai-proxy", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  ocs-data:

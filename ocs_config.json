@@ -1,0 +1,19 @@
+[
+    {
+        "name": "OCS Copilot",
+        "homepage": "http://localhost:8080",
+        "url": "http://localhost:8080/search",
+        "method": "post",
+        "type": "GM_xmlhttpRequest",
+        "contentType": "json",
+        "data": {
+            "title": "${title}",
+            "options": "${options}",
+            "type": "${type}"
+        },
+        "headers": {
+            "Authorization": "Bearer 这里替换成服务端配置的 ACCESS_TOKEN"
+        },
+        "handler": "return (res) => { if (res.code !== 1) return [res.msg, undefined]; let answer = String(res.answer || '').trim(); if (answer === '正确') answer = '对'; if (answer === '错误') answer = '错'; return [res.question, answer]; }"
+    }
+]
