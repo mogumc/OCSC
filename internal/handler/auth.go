@@ -20,10 +20,19 @@ func AuthGuard(token, header string, next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// OCS 的「测试连接」发的是 HEAD，不带任何令牌。
+		// 这类探测请求直接放行，交由 handler 回 200，否则配置界面会误报连接失败。
+		if r.Method == http.MethodHead {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		if !validToken(r.Header.Get(header), token) {
 			// 只记录来源与路径，绝不记录令牌本身。
 			logx.Warn("鉴权失败: %s %s 来自 %s", r.Method, r.URL.Path, r.RemoteAddr)
-			writeResponse(w, http.StatusUnauthorized, model.SearchResponse{
+			// 这里刻意回 200 而不是 401：OCS 的 handler 只有在拿到响应体时
+			// 才能把 msg 显示给用户，回 401 的话界面上只会看到一句笼统的失败。
+			writeResponse(w, http.StatusOK, model.SearchResponse{
 				Code: 0,
 				Msg:  "未授权：请求头 " + header + " 缺少有效的访问令牌",
 			})

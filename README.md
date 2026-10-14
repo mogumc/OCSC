@@ -183,6 +183,12 @@ curl -X POST http://localhost:8080/search \
 服务状态与健康检查。容器健康检查用的就是 `/health`。
 这两个接口**不受鉴权保护**，方便探活。
 
+### `HEAD /search`
+
+OCS 题库配置里的「测试连接」发的就是这个请求（形如 `/search?t=`）。
+只要服务活着就回 `200`，**不需要令牌、也不消耗模型额度**——
+带着令牌去测连接会让配置界面误报失败。
+
 ### `POST /search`
 
 OCS 题库协议接口，也是唯一会消耗模型额度的接口。
@@ -246,15 +252,18 @@ Authorization: Bearer <ACCESS_TOKEN>
 Authorization: <ACCESS_TOKEN>
 ```
 
-校验失败返回 HTTP 401，响应体仍是 OCS 协议格式：
+令牌不对时**回 200 而不是 401**，报错信息放在响应体的 `msg` 里：
 
 ```json
 { "code": 0, "msg": "未授权：请求头 Authorization 缺少有效的访问令牌" }
 ```
 
+> 之所以不用 401：OCS 的 handler 只有拿到响应体才能把 `msg` 显示出来，
+> 回 401 的话界面上只会看到一句笼统的失败，排查不了原因。
+
 要点：
 
-- **只有 `/search` 受保护**，`/` 与 `/health` 保持开放以便探活
+- **只有 `POST /search` 受保护**，`/`、`/health` 以及 `HEAD /search`（测试连接）保持开放
 - 令牌建议用 `openssl rand -hex 32` 生成
 - 日志只记录请求来源与路径，**不会打印令牌内容**
 - 面向公网时建议再叠加一层反向代理与限流

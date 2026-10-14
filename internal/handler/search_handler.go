@@ -46,6 +46,15 @@ func (h *SearchHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		logx.Field("耗时", fmt.Sprintf("%.1fs", time.Since(start).Seconds()))
 	}()
 
+	// OCS 的「测试连接」发 HEAD（形如 /search?t=），只关心能不能通，
+	// 直接回 200，不做鉴权也不消耗模型额度。
+	if r.Method == http.MethodHead {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"code":1,"msg":"OCS Copilot is running"}`))
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		writeResponse(w, http.StatusMethodNotAllowed, model.SearchResponse{Code: 0, Msg: "仅支持 POST 方法"})
 		return

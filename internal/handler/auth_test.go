@@ -78,8 +78,10 @@ func TestAuthGuardRejects(t *testing.T) {
 			rec := httptest.NewRecorder()
 			srv.ServeHTTP(rec, req)
 
-			if rec.Code != http.StatusUnauthorized {
-				t.Fatalf("期望 401，实际 %d", rec.Code)
+			// 刻意不用 401：OCS 的 handler 只有拿到响应体才能把 msg 显示出来，
+			// 回 401 界面上只会看到一句笼统的失败
+			if rec.Code != http.StatusOK {
+				t.Fatalf("期望 200（而不是 401），实际 %d", rec.Code)
 			}
 
 			var resp model.SearchResponse
@@ -90,6 +92,20 @@ func TestAuthGuardRejects(t *testing.T) {
 				t.Fatalf("期望 code=0 且带 msg，实际 %+v", resp)
 			}
 		})
+	}
+}
+
+func TestAuthGuardLetsHeadProbeThrough(t *testing.T) {
+	// OCS 的「测试连接」发的是 HEAD 且不带令牌，必须放行，
+	// 否则题库配置界面会报连接失败
+	srv := newGuardedServer(testToken, "Authorization")
+
+	req := httptest.NewRequest(http.MethodHead, "/search?t=", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("HEAD 探测应当放行，实际 %d", rec.Code)
 	}
 }
 
