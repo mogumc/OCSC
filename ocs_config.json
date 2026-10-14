@@ -9,7 +9,12 @@
         "data": {
             "title": "${title}",
             "options": "${options}",
-            "type": "${type}"
+            "type": "${type}",
+            "images": {
+                "handler": "return (env) => env.images || []"
+            },
+            "suggestion_title": "${suggestion_title}",
+            "suggestion_options": "${suggestion_options}"
         },
         "headers": {
             "Authorization": "Bearer 这里替换成服务端配置的 ACCESS_TOKEN"

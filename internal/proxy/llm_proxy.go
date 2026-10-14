@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -159,7 +160,7 @@ func (p *LLMProxy) resolveImages(raw []string) []string {
 }
 
 // normalizeImageRef 把下游传入的图片字段规整为模型可识别的引用。
-// 支持 data URI、http(s) 链接，以及裸 base64（按 PNG 处理）。
+// 支持 data URI、http(s) 链接，以及裸 base64。
 func normalizeImageRef(raw string) (string, bool) {
 	raw = strings.TrimSpace(raw)
 	switch {
@@ -170,7 +171,46 @@ func normalizeImageRef(raw string) (string, bool) {
 	case strings.HasPrefix(raw, "http://"), strings.HasPrefix(raw, "https://"):
 		return raw, true
 	default:
-		return "data:" + defaultImageMime + ";base64," + raw, true
+		return "data:" + sniffImageMime(raw) + ";base64," + raw, true
+	}
+}
+
+// sniffImageMime 从裸 base64 的前若干字节判断真实图片类型。
+//
+// OCS 图片题优化送上来的图可能不带 MIME 前缀，而 MIME 写错有些上游会直接拒图，
+// 所以这里按文件头猜一下；猜不出来再退回 PNG。
+func sniffImageMime(b64 string) string {
+	// 取 32 个字符（24 字节）就够看清所有文件头
+	head := strings.TrimSpace(b64)
+	if len(head) > 32 {
+		head = head[:32]
+	}
+	// base64 每 4 个字符对应 3 字节，截到整数个组才能安全解码
+	// （有些编码器会省略末尾的 = 填充，那样子串整体长度不是 4 的倍数）
+	if n := len(head) / 4 * 4; n >= 4 {
+		head = head[:n]
+	} else {
+		return defaultImageMime
+	}
+
+	raw, err := base64.StdEncoding.DecodeString(head)
+	if err != nil || len(raw) < 4 {
+		return defaultImageMime
+	}
+
+	switch {
+	case bytes.HasPrefix(raw, []byte{0x89, 'P', 'N', 'G'}):
+		return "image/png"
+	case bytes.HasPrefix(raw, []byte{0xFF, 0xD8, 0xFF}):
+		return "image/jpeg"
+	case bytes.HasPrefix(raw, []byte("GIF8")):
+		return "image/gif"
+	case len(raw) >= 12 && bytes.HasPrefix(raw, []byte("RIFF")) && bytes.Equal(raw[8:12], []byte("WEBP")):
+		return "image/webp"
+	case bytes.HasPrefix(raw, []byte("BM")):
+		return "image/bmp"
+	default:
+		return defaultImageMime
 	}
 }
 

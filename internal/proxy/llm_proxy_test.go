@@ -1,7 +1,9 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -23,6 +25,49 @@ func testConfig(enableVision bool) config.Config {
 		EnableVision: enableVision,
 		AuthHeader:   "Authorization",
 	}
+}
+
+func TestSniffImageMime(t *testing.T) {
+	// 用真实文件头 + 填充字节构造一张「图片」，再整体做标准 base64，
+	// 避免手写 base64 字符串出错
+	cases := []struct {
+		name string
+		head []byte
+		want string
+	}{
+		{"PNG", []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, "image/png"},
+		{"JPEG", []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46}, "image/jpeg"},
+		{"GIF", []byte("GIF89a"), "image/gif"},
+		{"WebP", []byte("RIFF\x00\x00\x00\x00WEBP"), "image/webp"},
+		{"BMP", []byte("BM\x00\x00"), "image/bmp"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			payload := append(append([]byte{}, c.head...), bytes.Repeat([]byte{0}, 1024)...)
+			if got := sniffImageMime(base64.StdEncoding.EncodeToString(payload)); got != c.want {
+				t.Fatalf("sniffImageMime() = %q，期望 %q", got, c.want)
+			}
+		})
+	}
+
+	t.Run("认不出的格式退回 PNG", func(t *testing.T) {
+		if got := sniffImageMime("AAAAAAAA"); got != defaultImageMime {
+			t.Fatalf("应当退回 %q，实际 %q", defaultImageMime, got)
+		}
+	})
+
+	t.Run("不是合法 base64 时退回 PNG", func(t *testing.T) {
+		if got := sniffImageMime("这不是 base64!!!"); got != defaultImageMime {
+			t.Fatalf("应当退回 %q，实际 %q", defaultImageMime, got)
+		}
+	})
+
+	t.Run("过短的数据退回 PNG", func(t *testing.T) {
+		if got := sniffImageMime("AA"); got != defaultImageMime {
+			t.Fatalf("应当退回 %q，实际 %q", defaultImageMime, got)
+		}
+	})
 }
 
 func TestCleanContent(t *testing.T) {
@@ -192,7 +237,9 @@ func TestNormalizeImageRef(t *testing.T) {
 		{"data URI 原样保留", "data:image/jpeg;base64,/9j/4AAQ", "data:image/jpeg;base64,/9j/4AAQ", true},
 		{"https 链接原样保留", "https://example.com/q.png", "https://example.com/q.png", true},
 		{"http 链接原样保留", "http://example.com/q.png", "http://example.com/q.png", true},
-		{"裸 base64 补 PNG 前缀", "iVBORw0KGgoAAA", "data:image/png;base64,iVBORw0KGgoAAA", true},
+		{"裸 base64（PNG）按文件头补 MIME", "iVBORw0KGgoAAA", "data:image/png;base64,iVBORw0KGgoAAA", true},
+		{"裸 base64（JPEG）按文件头补 MIME", "/9j/4AAQ", "data:image/jpeg;base64,/9j/4AAQ", true},
+		{"裸 base64（GIF）按文件头补 MIME", "R0lGODlh", "data:image/gif;base64,R0lGODlh", true},
 		{"带空格的裸 base64", "  iVBORw0KGgoAAA  ", "data:image/png;base64,iVBORw0KGgoAAA", true},
 		{"空字符串丢弃", "   ", "", false},
 	}

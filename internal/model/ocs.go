@@ -1,5 +1,11 @@
 package model
 
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+)
+
 // OCS 网课助手使用的题型标识。
 const (
 	TypeSingle     = "single"
@@ -10,15 +16,61 @@ const (
 
 // SearchRequest 是 OCS 题库协议（自定义题库）的请求体。
 //
-// Images 是本项目的扩展字段，仅在服务端开启 ENABLE_VISION 时生效，
-// 用于把题干截图 / 试卷图片交给多模态模型作答。
-// SkipCache 也是扩展字段：置为 true 时跳过缓存读取，强制重新问一次模型。
+// Images / SuggestionTitle / SuggestionOptions 由 OCS「图片题优化」提供
+// （需要 OCS 5.1 及以上并在设置里开启）：开启后 OCS 会把题干图片转成 Base64
+// 一并上传，原题的 title / options 不会被修改。
+//
+// SkipCache 是本项目的扩展字段：置为 true 时跳过缓存读取，强制重新问一次模型。
 type SearchRequest struct {
-	Title     string   `json:"title"`
-	Options   string   `json:"options"`
-	Type      string   `json:"type"`
-	Images    []string `json:"images,omitempty"`
-	SkipCache bool     `json:"skip_cache,omitempty"`
+	Title             string `json:"title"`
+	Options           string `json:"options"`
+	Type              string `json:"type"`
+	Images            Images `json:"images,omitempty"`
+	SuggestionTitle   string `json:"suggestion_title,omitempty"`
+	SuggestionOptions string `json:"suggestion_options,omitempty"`
+	SkipCache         bool   `json:"skip_cache,omitempty"`
+}
+
+// Images 兼容下游传图片的两种写法：
+//   - JSON 数组（推荐：配置里用字段解析器返回 env.images）
+//   - 字符串（把 "${images}" 直接写进配置时，OCS 会拼成字符串传过来）
+//
+// 之所以要容忍字符串，是因为写法不对时如果直接反序列化失败，整个请求会 400，
+// 连纯文字题都会一起挂掉。声明成具名类型只是为了自定义反序列化，
+// 底层仍是 []string，可以直接当切片用。
+type Images []string
+
+// UnmarshalJSON 实现「数组或字符串都能接住」。
+func (im *Images) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		*im = nil
+		return nil
+	}
+
+	if trimmed[0] == '[' {
+		var list []string
+		if err := json.Unmarshal(trimmed, &list); err != nil {
+			return err
+		}
+		*im = list
+		return nil
+	}
+
+	// 字符串形式：可能是单张图，也可能是按换行拼起来的多张
+	var raw string
+	if err := json.Unmarshal(trimmed, &raw); err != nil {
+		return err
+	}
+
+	var list []string
+	for _, part := range strings.Split(raw, "\n") {
+		if part = strings.TrimSpace(part); part != "" {
+			list = append(list, part)
+		}
+	}
+	*im = list
+	return nil
 }
 
 // SearchResponse 是 OCS 题库协议的响应体。

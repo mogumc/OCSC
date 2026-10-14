@@ -194,7 +194,8 @@ OCS 题库协议接口，也是唯一会消耗模型额度的接口。
 | `title` | 是 | 题目文本 |
 | `options` | 否 | 选项文本，每行一个 |
 | `type` | 否 | `single` / `multiple` / `judgement` / `completion` |
-| `images` | 否 | 题干图片，仅在 `ENABLE_VISION=true` 时生效 |
+| `images` | 否 | 题干图片，仅在 `ENABLE_VISION=true` 时生效。OCS 5.1+ 开启「图片题优化」后会自动带上 |
+| `suggestion_title` / `suggestion_options` | 否 | OCS 图片题优化附带的建议文本，服务端当前不消费 |
 | `skip_cache` | 否 | 设为 `true` 时跳过缓存，强制重新问一次模型 |
 
 响应：
@@ -224,7 +225,9 @@ OCS 题库协议接口，也是唯一会消耗模型额度的接口。
 - **上游模型必须支持视觉（多模态）**，用纯文本模型开这个开关没有意义
 - 单次请求最多 8 张图片，多余的会被丢弃并打日志
 - 开关关闭时，请求里的 `images` 会被忽略并告警，不影响原来的纯文本答题
-- OCS 题库配置的 `data` 里没有图片占位符，所以图片需要由自建脚本 / 客户端调用
+- **OCS 5.1 及以上**在【全局设置】里开启「图片题优化」后，会把题干图片转成 Base64
+  随题目一起发过来，这时不需要额外写脚本；旧版 OCS 不认识这些字段，会当空值处理，
+  纯文字题照常工作
 
 ## 请求头鉴权
 
@@ -286,7 +289,12 @@ Authorization: <ACCESS_TOKEN>
         "data": {
             "title": "${title}",
             "options": "${options}",
-            "type": "${type}"
+            "type": "${type}",
+            "images": {
+                "handler": "return (env) => env.images || []"
+            },
+            "suggestion_title": "${suggestion_title}",
+            "suggestion_options": "${suggestion_options}"
         },
         "headers": {
             "Authorization": "Bearer 你的 ACCESS_TOKEN"
@@ -302,6 +310,9 @@ Authorization: <ACCESS_TOKEN>
 - **开启鉴权后，务必把 `headers.Authorization` 里的占位符替换成真实的 `ACCESS_TOKEN`**
 - 如果 OCS 请求不到数据，到油猴脚本头部元信息的 `@connect` 里加上对应域名
   （或把 `@connect` 模式设为宽松）
+- **`images` 必须写成上面那种「字段解析器」形式，不能写成 `"${images}"`**：
+  写错的话 OCS 会把数组拼成一个字符串，图片就传不过去（服务端能容忍这种写法不报错，
+  但图会丢）。这是 OCS 官方的要求，不是本服务的怪癖
 
 ## 常见问题
 
